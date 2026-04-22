@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Transformer Explainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Variables ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0f;--bg2:#111118;--bg3:#18181f;--bg4:#1e1e28;
+  --border:rgba(139,92,246,.18);--border2:rgba(255,255,255,.07);
+  --purple:#8b5cf6;--purple-dim:#4c1d95;--purple-bright:#a78bfa;
+  --red:#ef4444;--blue:#63b3ed;--green:#34d399;--orange:#f6ad55;
+  --text:#e2e8f0;--text-muted:#64748b;--text-dim:#94a3b8;
+  --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+}
+html,body{height:100%;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5}
+button{font-family:var(--sans)}
+select,input{font-family:var(--sans)}
+
+/* ── App Shell ── */
+.app{
+  min-height:100vh;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%,rgba(139,92,246,.12) 0%,transparent 60%),
+    linear-gradient(rgba(139,92,246,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(139,92,246,.03) 1px,transparent 1px);
+  background-size:auto,40px 40px,40px 40px;
+}
+
+/* ── Top Bar ── */
+.topbar{
+  display:flex;align-items:center;gap:14px;
+  padding:10px 20px;background:var(--bg2);
+  border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:100;
+  flex-wrap:wrap;
+}
+.brand{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.brand-icon{font-size:1.3rem;color:var(--purple-bright);animation:spin 8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.brand-text{font-family:var(--mono);font-size:.82rem;font-weight:700;color:var(--purple-bright);letter-spacing:.08em;white-space:nowrap}
+
+.controls-center{flex:1;display:flex;align-items:center;gap:10px;min-width:220px}
+.example-select{
+  background:var(--bg3);color:var(--text);border:1px solid var(--border);
+  border-radius:8px;padding:7px 12px;font-size:.82rem;cursor:pointer;outline:none;
+  transition:border-color .2s;max-width:260px;width:100%
+}
+.example-select:hover,.example-select:focus{border-color:var(--purple)}
+.predicted-badge{
+  background:rgba(139,92,246,.15);border:1px solid var(--border);
+  border-radius:8px;padding:5px 12px;font-family:var(--mono);font-size:.75rem;
+  color:var(--purple-bright);white-space:nowrap;flex-shrink:0
+}
+
+.controls-right{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.ctrl-group{display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--text-dim)}
+input[type=range]{width:70px;accent-color:var(--purple);cursor:pointer}
+.ctrl-val{font-family:var(--mono);color:var(--text);min-width:24px}
+.radio-row{display:flex;gap:8px}
+.radio-row label{display:flex;align-items:center;gap:3px;cursor:pointer;color:var(--text)}
+.radio-row input[type=radio]{accent-color:var(--purple)}
+.num-in{
+  width:40px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:4px;color:var(--text);padding:2px 4px;
+  font-family:var(--mono);font-size:.78rem;text-align:center
+}
+.icon-btn{
+  background:none;border:1px solid var(--border);color:var(--text-muted);
+  border-radius:6px;width:30px;height:30px;cursor:pointer;font-size:.95rem;
+  display:flex;align-items:center;justify-content:center;transition:all .2s
+}
+.icon-btn:hover{border-color:var(--purple);color:var(--purple-bright)}
+
+/* ── Canvas ── */
+.canvas{
+  display:flex;align-items:flex-start;gap:0;
+  padding:20px 16px 30px;overflow-x:auto;
+  min-height:calc(100vh - 56px);
+}
+.canvas::-webkit-scrollbar{height:5px}
+.canvas::-webkit-scrollbar-track{background:var(--bg)}
+.canvas::-webkit-scrollbar-thumb{background:rgba(139,92,246,.4);border-radius:4px}
+
+/* ── Token Column ── */
+.token-col{display:flex;flex-direction:column;gap:4px;padding-top:38px;flex-shrink:0;min-width:60px}
+.col-hdr{font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-bottom:8px;font-family:var(--mono)}
+.token-lbl{height:36px;display:flex;align-items:center;font-family:var(--mono);font-size:.78rem;color:var(--text-dim);padding:0 6px}
+
+/* ── Stage ── */
+.stage{display:flex;flex-direction:column;flex-shrink:0}
+.s-label{
+  font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);
+  margin-bottom:5px;font-family:var(--mono);cursor:pointer;display:flex;align-items:center;gap:4px
+}
+.s-label:hover{color:var(--purple-bright)}
+.ib{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:15px;height:15px;border-radius:50%;border:1px solid var(--border);
+  font-size:.6rem;color:var(--text-muted);cursor:pointer;transition:all .2s
+}
+.s-label:hover .ib{border-color:var(--purple);color:var(--purple-bright)}
+
+/* ── Panel ── */
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px;transition:border-color .3s}
+.panel:hover{border-color:rgba(139,92,246,.4)}
+.p-hdr{display:flex;align-items:center;gap:7px;margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid var(--border2)}
+.p-icon{font-size:.9rem;color:var(--purple-bright)}
+.p-title{font-weight:600;font-size:.82rem;color:var(--text);flex:1}
+.p-info{font-size:.66rem;color:var(--text-muted);font-family:var(--mono)}
+.p-foot{margin-top:7px;font-size:.65rem;color:var(--text-muted);font-family:var(--mono);text-align:right}
+
+/* ── Token rows ── */
+.tok-row{display:flex;align-items:center;gap:7px;height:36px}
+.tok-chip{
+  background:rgba(139,92,246,.12);border:1px solid var(--border);border-radius:5px;
+  padding:2px 6px;font-family:var(--mono);font-size:.68rem;color:var(--purple-bright);
+  white-space:nowrap;flex-shrink:0;min-width:52px;text-align:center
+}
+.tok-chip.sm{min-width:38px;font-size:.62rem}
+
+/* ── Vector cells ── */
+.v-cells{display:flex;gap:2px}
+.v-cell{
+  width:15px;height:20px;border-radius:3px;
+  transition:background .5s;cursor:default;flex-shrink:0
+}
+.v-cell.sm{width:11px;height:15px}
+.v-cell.exp{width:7px}
+
+/* ── SVG Flow ── */
+.flow-svg{overflow:visible;flex-shrink:0}
+.flow-path{stroke-dasharray:6 4;animation:dash 1.4s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-20}}
+.flow-dot{filter:drop-shadow(0 0 4px #8b5cf6)}
+
+/* ── Embedding ── */
+.emb-panel{min-width:200px}
+.emb-content{display:flex;flex-direction:column;gap:4px}
+
+/* ── Block wrap ── */
+.blk-wrap{display:flex;flex-direction:column;min-width:520px;flex-shrink:0}
+.blk-hdr{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.blk-title{font-family:var(--mono);font-size:.82rem;color:var(--purple-bright);font-weight:700}
+.nav-btn{
+  background:var(--bg3);border:1px solid var(--border);color:var(--text-dim);
+  border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:1rem;
+  display:flex;align-items:center;justify-content:center;transition:all .2s
+}
+.nav-btn:hover{border-color:var(--purple);color:var(--purple-bright)}
+
+.blk-inner{display:flex;gap:8px;align-items:stretch}
+.res-track{display:flex;flex-direction:column;align-items:center;width:26px;flex-shrink:0}
+.res-tag{
+  font-size:.58rem;font-family:var(--mono);color:var(--text-muted);
+  writing-mode:vertical-rl;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px
+}
+.res-line{
+  flex:1;width:2px;
+  background:linear-gradient(180deg,var(--purple) 0%,transparent 100%);
+  border-radius:2px;position:relative
+}
+.res-line::after{
+  content:'';position:absolute;top:0;left:-3px;width:8px;height:8px;
+  border-radius:50%;background:var(--purple);animation:pulse 2s ease-in-out infinite
+}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+
+.attn-mlp-stack{flex:1;display:flex;flex-direction:column;gap:12px}
+
+/* ── Block Badge ── */
+.blk-badge{
+  margin-top:10px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:12px
+}
+.blk-num{font-family:var(--mono);font-size:1.4rem;font-weight:700;color:var(--purple-bright);min-width:22px}
+.blk-lbl{font-size:.68rem;color:var(--text-muted)}
+.blk-dots{display:flex;gap:3px;flex-wrap:wrap;max-width:120px}
+.blk-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--bg4);border:1px solid var(--border);transition:all .3s
+}
+.blk-dot.on{background:var(--purple);border-color:var(--purple-bright);box-shadow:0 0 6px rgba(139,92,246,.6)}
+
+/* ── View Tabs ── */
+.vtabs{display:flex;gap:5px;margin-bottom:8px}
+.vtab{
+  flex:1;padding:4px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:6px;color:var(--text-muted);font-size:.72rem;cursor:pointer;transition:all .2s
+}
+.vtab.on{background:rgba(139,92,246,.2);border-color:var(--purple);color:var(--purple-bright)}
+
+/* ── Head Nav ── */
+.head-nav{display:flex;align-items:center;gap:5px;font-size:.72rem;color:var(--text-dim);font-family:var(--mono)}
+.head-nav button{
+  background:var(--bg3);border:1px solid var(--border);color:var(--text-dim);
+  border-radius:4px;width:20px;height:20px;cursor:pointer;font-size:.85rem;
+  display:flex;align-items:center;justify-content:center;transition:all .2s
+}
+.head-nav button:hover{border-color:var(--purple);color:var(--purple-bright)}
+
+/* ── Attention Matrix ── */
+.attn-panel{min-width:270px}
+.attn-mat{overflow-x:auto}
+.attn-col-labels{display:flex;margin-bottom:2px}
+.attn-corner{width:50px;flex-shrink:0}
+.attn-cl{width:30px;flex-shrink:0;text-align:center;font-size:.58rem;color:var(--text-muted);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis}
+.attn-row-wrap{display:flex;align-items:center;gap:2px;margin-bottom:2px}
+.attn-rl{width:50px;flex-shrink:0;font-size:.62rem;color:var(--text-dim);font-family:var(--mono);text-align:right;padding-right:5px;overflow:hidden;text-overflow:ellipsis}
+.attn-cell{
+  width:30px;height:26px;border-radius:3px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.58rem;color:rgba(255,255,255,.75);font-family:var(--mono);
+  transition:background .4s;cursor:default
+}
+
+/* ── QKV view ── */
+.qkv-view{display:flex;flex-direction:column;gap:8px}
+.qkv-lbl{
+  font-size:.68rem;font-family:var(--mono);font-weight:700;
+  margin-bottom:3px;padding:2px 5px;border-radius:4px;display:inline-block
+}
+.q-lbl{color:#f87171;background:rgba(239,68,68,.1)}
+.k-lbl{color:#34d399;background:rgba(52,211,153,.1)}
+.v-lbl{color:#63b3ed;background:rgba(99,179,237,.1)}
+
+/* ── MLP Panel ── */
+.mlp-panel{min-width:220px}
+.phase-badge{font-size:.65rem;font-family:var(--mono);padding:2px 7px;border-radius:10px;background:var(--bg3);border:1px solid var(--border)}
+.ph0{color:#63b3ed;border-color:rgba(99,179,237,.3)}
+.ph1{color:#f6ad55;border-color:rgba(246,173,85,.3)}
+.ph2{color:#34d399;border-color:rgba(52,211,153,.3)}
+.mlp-dims{display:flex;gap:4px;margin-top:7px;justify-content:center}
+.dim-b{font-size:.62rem;font-family:var(--mono);padding:2px 5px;border-radius:4px;border:1px solid var(--border);color:var(--text-muted);transition:all .4s}
+.dim-b.on{border-color:var(--purple);color:var(--purple-bright);background:rgba(139,92,246,.15)}
+
+/* ── Output Panel ── */
+.out-panel{min-width:220px}
+.out-list{display:flex;flex-direction:column;gap:3px}
+.out-row{display:flex;align-items:center;gap:7px;padding:2px 0;border-radius:4px;transition:background .2s}
+.out-row.top-r{background:rgba(139,92,246,.07)}
+.out-tok{min-width:76px;font-family:var(--mono);font-size:.72rem;text-align:right}
+.out-bar-wrap{flex:1;height:14px;background:rgba(255,255,255,.04);border-radius:3px;overflow:hidden}
+.out-bar{height:100%;border-radius:3px;transition:width .6s cubic-bezier(.4,0,.2,1);min-width:2px}
+.out-pct{min-width:44px;font-family:var(--mono);font-size:.68rem;color:var(--text-dim);text-align:right}
+.top-pred-box{
+  margin-top:9px;padding:7px 10px;background:rgba(139,92,246,.12);
+  border:1px solid var(--border);border-radius:8px;font-size:.78rem;text-align:center;color:var(--text-dim)
+}
+.top-pred-box strong{color:var(--purple-bright);font-family:var(--mono)}
+
+/* ── Remaining blocks row ── */
+.rem-row{padding:0 16px 28px;display:flex;justify-content:center}
+.rem-card{
+  background:var(--bg2);border:1px dashed var(--border);border-radius:12px;
+  padding:12px 20px;text-align:center;max-width:380px
+}
+.rem-title{font-size:.82rem;color:var(--purple-bright);font-family:var(--mono);margin-bottom:3px}
+.rem-sub{font-size:.72rem;color:var(--text-muted);margin-bottom:8px}
+.rem-dots{display:flex;gap:4px;justify-content:center;flex-wrap:wrap}
+.rem-dot{width:9px;height:9px;border-radius:50%;background:var(--purple);opacity:.3;animation:breathe 2s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.2;transform:scale(.85)}50%{opacity:.7;transform:scale(1.1)}}
+
+/* ── Overlay / Info Drawer ── */
+.overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.65);
+  display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(4px)
+}
+.drawer-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:16px;
+  padding:26px;max-width:440px;width:90%;position:relative;
+  box-shadow:0 0 60px rgba(139,92,246,.2)
+}
+.drawer-close{
+  position:absolute;top:13px;right:13px;background:var(--bg3);border:1px solid var(--border);
+  color:var(--text-muted);border-radius:6px;width:26px;height:26px;cursor:pointer;
+  font-size:.75rem;display:flex;align-items:center;justify-content:center;transition:all .2s
+}
+.drawer-close:hover{color:var(--text);border-color:var(--purple)}
+.drawer-card h3{font-size:1rem;font-family:var(--mono);color:var(--purple-bright);margin-bottom:10px}
+.drawer-card h4{font-size:.82rem;color:var(--text-dim);margin:12px 0 5px}
+.drawer-card p{font-size:.82rem;color:var(--text-dim);line-height:1.7}
+.drawer-card ul{padding-left:16px;font-size:.78rem;color:var(--text-dim);line-height:1.9}
+.about-card{max-width:500px}
+
+/* ── Scrollbars ── */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:rgba(139,92,246,.4);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--purple)}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-icon">⬡</span>
+      <span class="brand-text">TRANSFORMER EXPLAINER</span>
+    </div>
+
+    <div class="controls-center">
+      <select class="example-select" id="exampleSelect"></select>
+      <div class="predicted-badge" id="predictedBadge">→ …</div>
+    </div>
+
+    <div class="controls-right">
+      <div class="ctrl-group">
+        <span>Temperature</span>
+        <input type="range" id="tempSlider" min="0.1" max="2" step="0.1" value="0.8" />
+        <span class="ctrl-val" id="tempVal">0.8</span>
+      </div>
+      <div class="ctrl-group">
+        <span>Sampling</span>
+        <div class="radio-row">
+          <label><input type="radio" name="sampling" value="topk" checked /> Top-k</label>
+          <label><input type="radio" name="sampling" value="topp" /> Top-p</label>
+        </div>
+        <div id="samplingControl">k=<input class="num-in" id="topKIn" type="number" min="1" max="50" value="5" /></div>
+      </div>
+      <button class="icon-btn" id="aboutBtn" title="About">ⓘ</button>
+    </div>
+  </header>
+
+  <!-- Main Canvas -->
+  <main class="canvas" id="canvas"></main>
+
+  <!-- Remaining blocks row -->
+  <section class="rem-row">
+    <div class="rem-card">
+      <div class="rem-title">11 more identical Transformer Blocks</div>
+      <div class="rem-sub">Each processes tokens through Attention + MLP + Residuals</div>
+      <div class="rem-dots" id="remDots"></div>
+    </div>
+  </section>
+
+  <!-- Overlay -->
+  <div class="overlay" id="overlay" style="display:none">
+    <div class="drawer-card" id="drawerCard">
+      <button class="drawer-close" id="drawerClose">✕</button>
+      <h3 id="drawerTitle"></h3>
+      <div id="drawerBody"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// DATA
+// ══════════════════════════════════════════════════════════
+const EXAMPLES = [
+  "Data visualization empowers users to",
+  "The quick brown fox jumps over",
+  "Artificial intelligence will transform the",
+  "In the beginning there was only"
+];
+
+const TOKENS = {
+  "Data visualization empowers users to":    ["Data","visual","ization","em","powers","users","to"],
+  "The quick brown fox jumps over":          ["The","quick","brown","fox","jumps","over"],
+  "Artificial intelligence will transform the":["Artificial","intel","ligence","will","transform","the"],
+  "In the beginning there was only":         ["In","the","beginning","there","was","only"]
+};
+
+const EMBEDDINGS = {
+  "Data visualization empowers users to":[
+    [0.23,-0.14,0.67,0.31,-0.52,0.88,-0.19,0.44],
+    [0.51,0.33,-0.28,0.72,0.19,-0.63,0.41,-0.37],
+    [-0.18,0.62,0.44,-0.29,0.83,0.15,-0.56,0.71],
+    [0.39,-0.47,0.21,0.58,-0.33,0.76,0.12,-0.65],
+    [-0.54,0.28,0.79,-0.41,0.63,-0.22,0.87,0.09],
+    [0.66,0.12,-0.73,0.35,0.48,-0.81,0.27,0.54],
+    [-0.31,0.85,0.17,-0.62,0.44,0.38,-0.79,0.23]
+  ],
+  "The quick brown fox jumps over":[
+    [0.41,-0.33,0.72,0.18,-0.64,0.55,-0.28,0.37],
+    [0.18,0.79,-0.42,0.63,0.27,-0.51,0.84,-0.16],
+    [-0.63,0.24,0.56,-0.38,0.91,0.12,-0.47,0.68],
+    [0.52,-0.61,0.33,0.74,-0.19,0.88,0.06,-0.43],
+    [-0.27,0.45,0.87,-0.52,0.39,-0.76,0.61,0.14],
+    [0.73,0.08,-0.58,0.41,0.62,-0.33,0.19,0.85]
+  ],
+  "Artificial intelligence will transform the":[
+    [0.35,-0.71,0.48,0.82,-0.26,0.59,-0.44,0.17],
+    [0.64,0.22,-0.53,0.37,0.81,-0.48,0.75,-0.29],
+    [-0.47,0.88,0.19,-0.66,0.53,0.34,-0.72,0.61],
+    [0.29,-0.54,0.76,0.43,-0.87,0.68,0.15,-0.38],
+    [-0.83,0.37,0.62,-0.28,0.74,-0.19,0.91,0.06],
+    [0.58,0.71,-0.34,0.85,0.23,-0.67,0.42,0.49]
+  ],
+  "In the beginning there was only":[
+    [0.17,-0.82,0.54,0.39,-0.71,0.28,-0.63,0.45],
+    [0.73,0.41,-0.29,0.68,0.15,-0.84,0.52,-0.37],
+    [-0.58,0.33,0.77,-0.44,0.61,0.19,-0.86,0.72],
+    [0.45,-0.67,0.22,0.83,-0.38,0.74,0.09,-0.51],
+    [-0.29,0.56,0.91,-0.73,0.47,-0.62,0.34,0.18],
+    [0.84,0.13,-0.48,0.57,0.79,-0.25,0.66,0.32]
+  ]
+};
+
+const ATTENTION = {
+  "Data visualization empowers users to":[
+    [[1,0,0,0,0,0,0],[.61,.39,0,0,0,0,0],[.22,.48,.30,0,0,0,0],[.08,.17,.41,.34,0,0,0],[.04,.11,.23,.38,.24,0,0],[.03,.07,.14,.27,.31,.18,0],[.02,.05,.09,.19,.28,.25,.12]],
+    [[1,0,0,0,0,0,0],[.44,.56,0,0,0,0,0],[.31,.29,.40,0,0,0,0],[.15,.24,.33,.28,0,0,0],[.09,.16,.22,.31,.22,0,0],[.06,.11,.17,.24,.28,.14,0],[.04,.08,.13,.18,.22,.21,.14]]
+  ],
+  "The quick brown fox jumps over":[
+    [[1,0,0,0,0,0],[.55,.45,0,0,0,0],[.19,.52,.29,0,0,0],[.07,.21,.44,.28,0,0],[.03,.09,.28,.41,.19,0],[.02,.06,.17,.33,.27,.15]],
+    [[1,0,0,0,0,0],[.38,.62,0,0,0,0],[.24,.37,.39,0,0,0],[.12,.19,.38,.31,0,0],[.07,.13,.24,.35,.21,0],[.04,.08,.16,.27,.29,.16]]
+  ],
+  "Artificial intelligence will transform the":[
+    [[1,0,0,0,0,0],[.48,.52,0,0,0,0],[.26,.39,.35,0,0,0],[.11,.22,.38,.29,0,0],[.06,.13,.27,.36,.18,0],[.04,.09,.18,.29,.26,.14]],
+    [[1,0,0,0,0,0],[.52,.48,0,0,0,0],[.17,.44,.39,0,0,0],[.09,.18,.42,.31,0,0],[.05,.11,.24,.38,.22,0],[.03,.07,.15,.26,.31,.18]]
+  ],
+  "In the beginning there was only":[
+    [[1,0,0,0,0,0],[.67,.33,0,0,0,0],[.14,.61,.25,0,0,0],[.06,.19,.47,.28,0,0],[.03,.08,.31,.43,.15,0],[.02,.05,.19,.38,.24,.12]],
+    [[1,0,0,0,0,0],[.41,.59,0,0,0,0],[.29,.33,.38,0,0,0],[.16,.22,.35,.27,0,0],[.08,.14,.26,.34,.18,0],[.05,.09,.18,.28,.26,.14]]
+  ]
+};
+
+const QKV = {
+  "Data visualization empowers users to":{
+    Q:[[.44,-.31,.72,.18],[.61,.23,-.48,.35],[-.27,.58,.39,-.64],[.52,-.44,.21,.77],[-.38,.69,.54,-.29],[.75,.16,-.62,.43],[-.19,.83,.27,-.71]],
+    K:[[.33,-.57,.81,.14],[.49,.38,-.62,.27],[-.41,.74,.28,-.55],[.67,-.33,.45,.61],[-.52,.61,.73,-.18],[.83,.09,-.47,.56],[-.24,.71,.18,-.83]],
+    V:[[.51,-.28,.64,.33],[.37,.59,-.41,.72],[-.63,.44,.57,-.29],[.48,-.72,.31,.85],[-.19,.83,.42,-.67],[.94,.07,-.58,.34],[-.37,.62,.48,-.59]]
+  },
+  "The quick brown fox jumps over":{
+    Q:[[.51,-.28,.64,.33],[.37,.59,-.41,.72],[-.63,.44,.57,-.29],[.48,-.72,.31,.85],[-.19,.83,.42,-.67],[.94,.07,-.58,.34]],
+    K:[[.42,-.67,.53,.28],[.73,.19,-.84,.41],[-.31,.58,.66,-.47],[.85,-.23,.37,.62],[-.49,.71,.28,-.83],[.62,.34,-.51,.79]],
+    V:[[.38,-.51,.73,.22],[.64,.41,-.58,.33],[-.47,.82,.19,-.68],[.59,-.34,.76,.48],[-.72,.27,.91,-.14],[.83,.11,-.64,.52]]
+  },
+  "Artificial intelligence will transform the":{
+    Q:[[.62,-.39,.74,.27],[.48,.71,-.33,.56],[-.54,.29,.83,-.41],[.37,-.62,.58,.71],[-.83,.47,.29,-.64],[.54,.68,-.37,.79]],
+    K:[[.71,-.44,.58,.33],[.39,.62,-.77,.48],[-.68,.53,.41,-.72],[.82,-.19,.63,.27],[-.41,.88,.17,-.55],[.67,.23,-.84,.41]],
+    V:[[.53,-.71,.42,.68],[.28,.83,-.47,.34],[-.66,.38,.79,-.23],[.74,-.52,.31,.88],[-.29,.63,.57,-.41],[.91,.14,-.73,.46]]
+  },
+  "In the beginning there was only":{
+    Q:[[.29,-.83,.51,.47],[.64,.38,-.72,.19],[-.47,.61,.84,-.33],[.73,-.29,.56,.41],[-.58,.77,.23,-.84],[.41,.53,-.69,.28]],
+    K:[[.37,-.64,.82,.19],[.58,.47,-.39,.73],[-.71,.28,.63,-.52],[.44,-.87,.31,.79],[-.63,.52,.74,-.28],[.81,.16,-.58,.43]],
+    V:[[.46,-.59,.77,.32],[.71,.24,-.83,.48],[-.38,.93,.17,-.64],[.59,-.41,.68,.53],[-.74,.36,.91,-.19],[.52,.67,-.44,.81]]
+  }
+};
+
+const MLP_OUT = {
+  "Data visualization empowers users to":[
+    [.31,-.22,.74,.43,-.61,.92,-.27,.51],[.58,.41,-.35,.79,.26,-.68,.47,-.44],
+    [-.25,.69,.51,-.36,.87,.22,-.63,.77],[.44,-.54,.28,.64,-.41,.81,.19,-.72],
+    [-.61,.35,.83,-.48,.69,-.29,.91,.16],[.72,.19,-.79,.42,.53,-.86,.34,.61],[-.38,.91,.24,-.69,.51,.44,-.83,.29]
+  ],
+  "The quick brown fox jumps over":[
+    [.47,-.41,.79,.25,-.72,.61,-.34,.43],[.24,.83,-.49,.68,.33,-.57,.88,-.22],
+    [-.69,.31,.62,-.44,.96,.18,-.53,.73],[.58,-.67,.39,.79,-.25,.91,.12,-.49],
+    [-.33,.51,.92,-.58,.45,-.82,.67,.21],[.78,.14,-.63,.47,.68,-.39,.25,.89]
+  ],
+  "Artificial intelligence will transform the":[
+    [.41,-.77,.54,.87,-.32,.65,-.51,.23],[.69,.28,-.59,.43,.86,-.54,.81,-.35],
+    [-.53,.93,.25,-.72,.59,.41,-.78,.67],[.35,-.61,.82,.49,-.93,.74,.21,-.44],
+    [-.87,.43,.68,-.34,.79,-.25,.96,.12],[.64,.77,-.41,.91,.29,-.73,.48,.55]
+  ],
+  "In the beginning there was only":[
+    [.23,-.88,.61,.45,-.77,.34,-.69,.51],[.79,.47,-.35,.73,.21,-.89,.58,-.43],
+    [-.64,.39,.83,-.51,.67,.25,-.92,.77],[.51,-.73,.28,.88,-.44,.79,.15,-.57],
+    [-.35,.62,.97,-.79,.53,-.68,.41,.24],[.89,.19,-.54,.63,.84,-.31,.72,.38]
+  ]
+};
+
+const OUTPUT_PROBS = {
+  "Data visualization empowers users to":[
+    {t:"visualize",p:.5467},{t:"create",p:.2087},{t:"see",p:.1209},
+    {t:"make",p:.0626},{t:"easily",p:.0611},{t:"quickly",p:0},
+    {t:"explore",p:0},{t:"find",p:0},{t:"understand",p:0},{t:"build",p:0}
+  ],
+  "The quick brown fox jumps over":[
+    {t:"the",p:.6823},{t:"a",p:.1547},{t:"his",p:.0721},
+    {t:"that",p:.0531},{t:"every",p:.0378},{t:"all",p:0},
+    {t:"each",p:0},{t:"its",p:0},{t:"my",p:0},{t:"one",p:0}
+  ],
+  "Artificial intelligence will transform the":[
+    {t:"world",p:.4312},{t:"way",p:.2641},{t:"future",p:.1528},
+    {t:"economy",p:.0819},{t:"industry",p:.0700},{t:"society",p:0},
+    {t:"landscape",p:0},{t:"field",p:0},{t:"technology",p:0},{t:"sector",p:0}
+  ],
+  "In the beginning there was only":[
+    {t:"one",p:.3891},{t:"darkness",p:.2734},{t:"silence",p:.1823},
+    {t:"God",p:.0921},{t:"void",p:.0631},{t:"light",p:0},
+    {t:"nothing",p:0},{t:"emptiness",p:0},{t:"chaos",p:0},{t:"peace",p:0}
+  ]
+};
+
+const INFO = {
+  embedding:{
+    title:"Embedding",
+    body:`<p>Input text is tokenized (split into words/subwords) and each token is mapped to a <strong>768-dimensional vector</strong>. A positional encoding is added to preserve word order. The final embedding = token embedding + positional encoding.</p>
+    <h4>GPT-2 Vocabulary</h4><p>50,257 unique tokens. Embedding matrix shape: (50,257 × 768) ≈ 39M parameters.</p>`
+  },
+  attention:{
+    title:"Multi-Head Self-Attention",
+    body:`<p>The core innovation of the Transformer. Each token computes three vectors:</p>
+    <ul><li><strong>Query (Q)</strong> — "what am I looking for?"</li><li><strong>Key (K)</strong> — "what do I contain?"</li><li><strong>Value (V)</strong> — "what do I emit?"</li></ul>
+    <p>Attention score = softmax(QKᵀ / √d). Applied to V gives context-aware representations. GPT-2 has 12 heads running in parallel.</p>`
+  },
+  mlp:{
+    title:"MLP Layer",
+    body:`<p>After attention, each token passes independently through a feed-forward network:</p>
+    <ul><li>Linear: 768 → 3072 (×4 expansion)</li><li>GELU activation</li><li>Linear: 3072 → 768 (compression)</li></ul>
+    <p>Unlike attention, MLP processes each token independently and enriches its representation.</p>`
+  },
+  output:{
+    title:"Output Probabilities",
+    body:`<p>After 12 Transformer blocks, a final linear layer projects each token to a <strong>50,257-dim logit vector</strong>. Softmax converts logits to a probability distribution over the vocabulary.</p>
+    <h4>Temperature</h4><p>Logits are divided by temperature before softmax. Lower = sharper (more confident). Higher = flatter (more diverse/creative).</p>`
+  },
+  about:{
+    title:"About Transformer Explainer",
+    body:`<h4>Architecture (GPT-2 small)</h4>
+    <ul><li>124M parameters</li><li>12 Transformer blocks</li><li>12 attention heads per block</li><li>768-dim embeddings</li><li>50,257 vocabulary</li></ul>
+    <h4>Controls</h4>
+    <ul><li><strong>Temperature</strong> — scales logits before softmax</li><li><strong>Top-k</strong> — sample from k most likely tokens</li><li><strong>Top-p</strong> — sample from smallest set with cumulative prob ≥ p</li></ul>
+    <p style="font-size:.76rem;opacity:.55;margin-top:14px">All computations are pre-computed hardcoded approximations for educational visualization. Inspired by Transformer Explainer (Georgia Tech).</p>`
+  }
+};
+
+// ══════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════
+let state = {
+  example: EXAMPLES[0],
+  temperature: 0.8,
+  sampling: 'topk',
+  topK: 5,
+  topP: 0.9,
+  activeHead: 0,
+  activeBlock: 1,
+  attnView: 'matrix',  // 'matrix'|'qkv'
+  mlpPhase: 0,
+  animBlock: false
+};
+
+// ══════════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════════
+function colorFromVal(v){
+  if(v>0)return`rgba(139,92,246,${Math.min(1,Math.abs(v))})`;
+  return`rgba(239,68,68,${Math.min(1,Math.abs(v))})`;
+}
+function heatColor(v){
+  const i=Math.min(1,Math.abs(v));
+  return v>=0?`rgba(99,179,237,${i})`:`rgba(252,129,74,${i})`;
+}
+function softmax(arr){
+  const max=Math.max(...arr);
+  const ex=arr.map(x=>Math.exp(x-max));
+  const s=ex.reduce((a,b)=>a+b,0);
+  return ex.map(x=>x/s);
+}
+function applyTemp(probs,temp){
+  if(temp===1)return probs;
+  const logits=probs.map(p=>Math.log(p+1e-10)/temp);
+  return softmax(logits);
+}
+function el(tag,cls,html){
+  const e=document.createElement(tag);
+  if(cls)e.className=cls;
+  if(html!==undefined)e.innerHTML=html;
+  return e;
+}
+
+// ══════════════════════════════════════════════════════════
+// BUILD PANELS
+// ══════════════════════════════════════════════════════════
+function buildVCells(vals,small,expanded){
+  const wrap=el('div',`v-cells`);
+  vals.forEach(v=>{
+    const c=el('div',`v-cell${small?' sm':''}${expanded?' exp':''}`);
+    c.style.background=colorFromVal(v);
+    c.title=v.toFixed(2);
+    wrap.appendChild(c);
+  });
+  return wrap;
+}
+
+function buildEmbPanel(ex){
+  const tokens=TOKENS[ex]||[];
+  const embs=EMBEDDINGS[ex]||[];
+  const panel=el('div','panel emb-panel');
+
+  const hdr=el('div','p-hdr');
+  hdr.innerHTML=`<span class="p-icon">⊞</span><span class="p-title">Embedding</span><span class="p-info">768-dim</span>`;
+  panel.appendChild(hdr);
+
+  const content=el('div','emb-content');
+  tokens.forEach((tok,i)=>{
+    const row=el('div','tok-row');
+    const chip=el('div','tok-chip',tok);
+    row.appendChild(chip);
+    row.appendChild(buildVCells(embs[i]||[]));
+    content.appendChild(row);
+  });
+  panel.appendChild(content);
+
+  const foot=el('div','p-foot',`${tokens.length} tokens · 768 dims`);
+  panel.appendChild(foot);
+  return panel;
+}
+
+function buildAttnMatrix(ex,head){
+  const tokens=TOKENS[ex]||[];
+  const weights=ATTENTION[ex]||[];
+  const attn=weights[head]||weights[0]||[];
+  const wrap=el('div','attn-mat');
+
+  // col labels
+  const colLabels=el('div','attn-col-labels');
+  colLabels.appendChild(el('div','attn-corner'));
+  tokens.forEach(t=>{colLabels.appendChild(el('div','attn-cl',t))});
+  wrap.appendChild(colLabels);
+
+  attn.forEach((row,r)=>{
+    const rowEl=el('div','attn-row-wrap');
+    rowEl.appendChild(el('div','attn-rl',tokens[r]||''));
+    row.forEach((v,c)=>{
+      const cell=el('div','attn-cell');
+      cell.style.background=v>0?`rgba(139,92,246,${v*.9+.05})`:'rgba(255,255,255,.03)';
+      cell.title=`${tokens[r]}→${tokens[c]}: ${(v*100).toFixed(1)}%`;
+      if(v>0.05)cell.textContent=Math.round(v*100);
+      rowEl.appendChild(cell);
+    });
+    wrap.appendChild(rowEl);
+  });
+  return wrap;
+}
+
+function buildQKVView(ex){
+  const tokens=TOKENS[ex]||[];
+  const qkv=QKV[ex]||{Q:[],K:[],V:[]};
+  const wrap=el('div','qkv-view');
+  ['Q','K','V'].forEach(name=>{
+    const grp=el('div');
+    const lbl=el('div',`qkv-lbl ${name==='Q'?'q-lbl':name==='K'?'k-lbl':'v-lbl'}`,
+      name==='Q'?'Query':name==='K'?'Key':'Value');
+    grp.appendChild(lbl);
+    tokens.forEach((tok,i)=>{
+      const row=el('div','tok-row');
+      row.appendChild(el('div','tok-chip sm',tok));
+      const cells=el('div','v-cells');
+      (qkv[name][i]||[]).forEach(v=>{
+        const c=el('div','v-cell sm');
+        c.style.background=heatColor(v);
+        c.title=v.toFixed(2);
+        cells.appendChild(c);
+      });
+      row.appendChild(cells);
+      grp.appendChild(row);
+    });
+    wrap.appendChild(grp);
+  });
+  return wrap;
+}
+
+function buildAttnPanel(ex){
+  const panel=el('div','panel attn-panel');
+  const hdr=el('div','p-hdr');
+
+  const titleGroup=el('div',null);
+  titleGroup.style.cssText='display:flex;align-items:center;gap:7px;flex:1';
+  titleGroup.innerHTML=`<span class="p-icon">◈</span><span class="p-title">Multi-Head Self-Attention</span>`;
+
+  const headNav=el('div','head-nav');
+  const prevH=el('button','','‹');
+  const headLabel=el('span','',`Head ${state.activeHead+1} of 12`);
+  const nextH=el('button','','›');
+  prevH.onclick=()=>{if(state.activeHead>0){state.activeHead--;updateAttnPanel(panel,ex);}};
+  nextH.onclick=()=>{if(state.activeHead<1){state.activeHead++;updateAttnPanel(panel,ex);}};
+  headNav.append(prevH,headLabel,nextH);
+
+  hdr.appendChild(titleGroup);
+  hdr.appendChild(headNav);
+  panel.appendChild(hdr);
+
+  // view tabs
+  const tabs=el('div','vtabs');
+  const t1=el('button',`vtab ${state.attnView==='matrix'?'on':''}`,'Attention Map');
+  const t2=el('button',`vtab ${state.attnView==='qkv'?'on':''}`,'Q / K / V');
+  t1.onclick=()=>{state.attnView='matrix';updateAttnPanel(panel,ex)};
+  t2.onclick=()=>{state.attnView='qkv';updateAttnPanel(panel,ex)};
+  tabs.append(t1,t2);
+  panel.appendChild(tabs);
+
+  const body=el('div','attn-body');
+  panel.appendChild(body);
+
+  // attach info click
+  titleGroup.querySelector('.p-title').style.cursor='pointer';
+  titleGroup.querySelector('.p-title').onclick=()=>showInfo('attention');
+
+  updateAttnPanel(panel,ex);
+  return panel;
+}
+
+function updateAttnPanel(panel,ex){
+  const body=panel.querySelector('.attn-body');
+  body.innerHTML='';
+  // sync head label
+  panel.querySelector('.head-nav span').textContent=`Head ${state.activeHead+1} of 12`;
+  // sync tabs
+  const tabs=panel.querySelectorAll('.vtab');
+  tabs[0].className=`vtab ${state.attnView==='matrix'?'on':''}`;
+  tabs[1].className=`vtab ${state.attnView==='qkv'?'on':''}`;
+
+  if(state.attnView==='matrix'){
+    body.appendChild(buildAttnMatrix(ex,state.activeHead));
+  } else {
+    body.appendChild(buildQKVView(ex));
+  }
+}
+
+let mlpPhaseTimer=null;
+function buildMlpPanel(ex){
+  const tokens=TOKENS[ex]||[];
+  const mlp=MLP_OUT[ex]||[];
+  const panel=el('div','panel mlp-panel');
+
+  const phases=['Input','Expanded (×4)','Output'];
+  const phaseCls=['ph0','ph1','ph2'];
+  const dims=['768→','3072→','768'];
+
+  const hdr=el('div','p-hdr');
+  const phBadge=el('span','phase-badge '+phaseCls[state.mlpPhase],phases[state.mlpPhase]);
+  hdr.innerHTML=`<span class="p-icon">⊡</span><span class="p-title">MLP</span>`;
+  hdr.appendChild(phBadge);
+  panel.appendChild(hdr);
+
+  const content=el('div',null);
+  content.style.cssText='display:flex;flex-direction:column;gap:4px';
+
+  function renderRows(ph){
+    content.innerHTML='';
+    tokens.slice(0,mlp.length).forEach((tok,i)=>{
+      const vals=mlp[i]||[];
+      let displayVals=vals;
+      if(ph===1){
+        displayVals=[...vals,...vals.map(v=>v*.7),...vals.map(v=>-v*.3),...vals.map(v=>v*.5)].slice(0,12);
+      }
+      const row=el('div','tok-row');
+      row.appendChild(el('div','tok-chip',tok));
+      const cells=el('div','v-cells');
+      displayVals.forEach(v=>{
+        const c=el('div',`v-cell${ph===1?' exp':''}`);
+        c.style.background=colorFromVal(v*(ph===2?1.2:1));
+        c.title=v.toFixed(2);
+        cells.appendChild(c);
+      });
+      row.appendChild(cells);
+      content.appendChild(row);
+    });
+    phBadge.className='phase-badge '+phaseCls[ph];
+    phBadge.textContent=phases[ph];
+
+    const dimBadges=panel.querySelectorAll('.dim-b');
+    dimBadges.forEach((d,i)=>{d.className=`dim-b${i===ph?' on':''}`;});
+  }
+
+  panel.appendChild(content);
+
+  const dimRow=el('div','mlp-dims');
+  dims.forEach((d,i)=>{
+    const b=el('div',`dim-b${i===state.mlpPhase?' on':''}`,d);
+    dimRow.appendChild(b);
+  });
+  panel.appendChild(dimRow);
+
+  renderRows(state.mlpPhase);
+
+  // Cycle phases
+  if(mlpPhaseTimer)clearInterval(mlpPhaseTimer);
+  mlpPhaseTimer=setInterval(()=>{
+    state.mlpPhase=(state.mlpPhase+1)%3;
+    renderRows(state.mlpPhase);
+  },1800);
+
+  return panel;
+}
+
+function buildOutPanel(ex){
+  const raw=OUTPUT_PROBS[ex]||[];
+  const nonZero=raw.filter(i=>i.p>0);
+  const adjusted=applyTemp(nonZero.map(i=>i.p),state.temperature);
+  const items=raw.map(item=>{
+    const nz=nonZero.findIndex(n=>n.t===item.t);
+    return{...item,ap:nz>=0?adjusted[nz]:0};
+  });
+
+  const panel=el('div','panel out-panel');
+  const hdr=el('div','p-hdr');
+  hdr.innerHTML=`<span class="p-icon">◉</span><span class="p-title">Output Probabilities</span><span class="p-info">temp=${state.temperature.toFixed(1)}</span>`;
+  panel.appendChild(hdr);
+
+  const list=el('div','out-list');
+  items.slice(0,10).forEach((item,i)=>{
+    const row=el('div',`out-row${i===0&&item.ap>0?' top-r':''}`);
+    const tok=el('div','out-tok',item.t);
+    tok.style.color=item.ap>.3?'#a78bfa':item.ap>.1?'#7c3aed':'#6b7280';
+    const bwrap=el('div','out-bar-wrap');
+    const bar=el('div','out-bar');
+    bar.style.width=`${(item.ap*100).toFixed(1)}%`;
+    bar.style.background=item.ap>.3?'linear-gradient(90deg,#7c3aed,#a78bfa)':
+      item.ap>.1?'linear-gradient(90deg,#4c1d95,#7c3aed)':'rgba(255,255,255,.08)';
+    bwrap.appendChild(bar);
+    const pct=el('div','out-pct',item.ap>.001?`${(item.ap*100).toFixed(2)}%`:'0%');
+    row.append(tok,bwrap,pct);
+    list.appendChild(row);
+  });
+  panel.appendChild(list);
+
+  const top=items.find(i=>i.ap>0);
+  if(top){
+    const box=el('div','top-pred-box');
+    box.innerHTML=`Next token: <strong>"${top.t}"</strong> (${(top.ap*100).toFixed(1)}%)`;
+    panel.appendChild(box);
+  }
+  return panel;
+}
+
+// ══════════════════════════════════════════════════════════
+// FLOW SVG
+// ══════════════════════════════════════════════════════════
+function buildFlowSVG(tokens,animated){
+  const n=tokens.length;
+  const h=Math.max(280,n*44);
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('width','50');
+  svg.setAttribute('height',h);
+  svg.style.overflow='visible';
+  svg.style.flexShrink='0';
+
+  tokens.forEach((_,i)=>{
+    const y=22+i*44;
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',`M0,${y} C25,${y} 25,${y} 50,${y}`);
+    path.setAttribute('stroke','rgba(139,92,246,0.5)');
+    path.setAttribute('stroke-width','2');
+    path.setAttribute('fill','none');
+    if(animated)path.setAttribute('class','flow-path');
+    svg.appendChild(path);
+
+    if(animated){
+      const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      dot.setAttribute('r','3');
+      dot.setAttribute('fill','#8b5cf6');
+      dot.setAttribute('class','flow-dot');
+      const anim=document.createElementNS('http://www.w3.org/2000/svg','animateMotion');
+      anim.setAttribute('dur',`${1.2+i*.2}s`);
+      anim.setAttribute('repeatCount','indefinite');
+      anim.setAttribute('path',`M0,${y} C25,${y} 25,${y} 50,${y}`);
+      dot.appendChild(anim);
+      svg.appendChild(dot);
+    }
+  });
+  return svg;
+}
+
+// ══════════════════════════════════════════════════════════
+// RENDER CANVAS
+// ══════════════════════════════════════════════════════════
+let blockAnimTimer=null;
+function renderCanvas(){
+  const ex=state.example;
+  const tokens=TOKENS[ex]||[];
+  const canvas=document.getElementById('canvas');
+  canvas.innerHTML='';
+
+  // Token column
+  const tokCol=el('div','token-col');
+  tokCol.appendChild(el('div','col-hdr','Tokens'));
+  tokens.forEach(t=>tokCol.appendChild(el('div','token-lbl',t)));
+  canvas.appendChild(tokCol);
+
+  // Embedding stage
+  const embStage=el('div','stage');
+  const embLabel=el('div','s-label');
+  embLabel.innerHTML='Embedding <span class="ib">?</span>';
+  embLabel.onclick=()=>showInfo('embedding');
+  embStage.appendChild(embLabel);
+  embStage.appendChild(buildEmbPanel(ex));
+  canvas.appendChild(embStage);
+
+  canvas.appendChild(buildFlowSVG(tokens,state.animBlock));
+
+  // Transformer Block
+  const blkWrap=el('div','blk-wrap');
+
+  const blkHdr=el('div','blk-hdr');
+  const prevB=el('button','nav-btn','‹');
+  const blkTitle=el('span','blk-title',`Transformer Block ${state.activeBlock}`);
+  const nextB=el('button','nav-btn','›');
+  prevB.onclick=()=>{if(state.activeBlock>1){state.activeBlock--;blkTitle.textContent=`Transformer Block ${state.activeBlock}`;updateBlockDots();}};
+  nextB.onclick=()=>{if(state.activeBlock<12){state.activeBlock++;blkTitle.textContent=`Transformer Block ${state.activeBlock}`;updateBlockDots();}};
+  blkHdr.append(prevB,blkTitle,nextB);
+  blkWrap.appendChild(blkHdr);
+
+  const blkInner=el('div','blk-inner');
+
+  // Left residual
+  const resL=el('div','res-track');
+  resL.innerHTML='<div class="res-tag">Residual</div><div class="res-line"></div>';
+  blkInner.appendChild(resL);
+
+  // Attention + MLP stack
+  const stack=el('div','attn-mlp-stack');
+  const attnLabel=el('div','s-label');
+  attnLabel.innerHTML='Multi-Head Self Attention <span class="ib">?</span>';
+  attnLabel.onclick=()=>showInfo('attention');
+  stack.appendChild(attnLabel);
+
+  const attnPanel=buildAttnPanel(ex);
+  stack.appendChild(attnPanel);
+
+  const mlpLabel=el('div','s-label');
+  mlpLabel.innerHTML='MLP <span class="ib">?</span>';
+  mlpLabel.onclick=()=>showInfo('mlp');
+  stack.appendChild(mlpLabel);
+  stack.appendChild(buildMlpPanel(ex));
+  blkInner.appendChild(stack);
+
+  // Right residual
+  const resR=el('div','res-track');
+  resR.innerHTML='<div class="res-tag">Residual</div><div class="res-line"></div>';
+  blkInner.appendChild(resR);
+  blkWrap.appendChild(blkInner);
+
+  // Block badge
+  const badge=el('div','blk-badge');
+  const badgeInner=el('div','');
+  badgeInner.style.cssText='display:flex;align-items:baseline;gap:4px';
+  badgeInner.innerHTML=`<span class="blk-num" id="blkNum">${state.activeBlock}</span><span class="blk-lbl">/ 12 Transformer Blocks</span>`;
+  badge.appendChild(badgeInner);
+  const dotsWrap=el('div','blk-dots',);
+  dotsWrap.id='blkDots';
+  for(let i=0;i<12;i++){
+    const d=el('div',`blk-dot${i<state.activeBlock?' on':''}`);
+    dotsWrap.appendChild(d);
+  }
+  badge.appendChild(dotsWrap);
+  blkWrap.appendChild(badge);
+  canvas.appendChild(blkWrap);
+
+  canvas.appendChild(buildFlowSVG(tokens,state.animBlock));
+
+  // Post-block MLP stage
+  const mlpStage=el('div','stage');
+  mlpStage.appendChild(el('div','s-label','Post-Block Output'));
+  mlpStage.appendChild(buildMlpPanel(ex));
+  canvas.appendChild(mlpStage);
+
+  canvas.appendChild(buildFlowSVG(tokens,state.animBlock));
+
+  // Output stage
+  const outStage=el('div','stage output-stage');
+  const outLabel=el('div','s-label');
+  outLabel.innerHTML='Probabilities <span class="ib">?</span>';
+  outLabel.onclick=()=>showInfo('output');
+  outStage.appendChild(outLabel);
+  outStage.appendChild(buildOutPanel(ex));
+  canvas.appendChild(outStage);
+
+  // Remaining blocks dots
+  const remDots=document.getElementById('remDots');
+  remDots.innerHTML='';
+  for(let i=0;i<11;i++){
+    const d=el('div','rem-dot');
+    d.style.animationDelay=`${i*.1}s`;
+    remDots.appendChild(d);
+  }
+}
+
+function updateBlockDots(){
+  const dotsWrap=document.getElementById('blkDots');
+  const numEl=document.getElementById('blkNum');
+  if(dotsWrap){
+    dotsWrap.querySelectorAll('.blk-dot').forEach((d,i)=>{
+      d.className=`blk-dot${i<state.activeBlock?' on':''}`;
+    });
+  }
+  if(numEl)numEl.textContent=state.activeBlock;
+}
+
+function animateBlockEntry(){
+  state.animBlock=true;
+  state.activeBlock=0;
+  if(blockAnimTimer)clearInterval(blockAnimTimer);
+  blockAnimTimer=setInterval(()=>{
+    state.activeBlock=Math.min(12,state.activeBlock+1);
+    const dotsWrap=document.getElementById('blkDots');
+    const numEl=document.getElementById('blkNum');
+    if(dotsWrap){
+      dotsWrap.querySelectorAll('.blk-dot').forEach((d,i)=>{
+        d.className=`blk-dot${i<state.activeBlock?' on':''}`;
+      });
+    }
+    if(numEl)numEl.textContent=state.activeBlock;
+    if(state.activeBlock>=12){
+      clearInterval(blockAnimTimer);
+      state.animBlock=false;
+    }
+  },120);
+}
+
+// ══════════════════════════════════════════════════════════
+// INFO / OVERLAY
+// ══════════════════════════════════════════════════════════
+function showInfo(topic){
+  const info=INFO[topic];
+  if(!info)return;
+  document.getElementById('drawerTitle').textContent=info.title;
+  document.getElementById('drawerBody').innerHTML=info.body;
+  document.getElementById('overlay').style.display='flex';
+}
+function hideInfo(){document.getElementById('overlay').style.display='none';}
+
+// ══════════════════════════════════════════════════════════
+// INIT CONTROLS
+// ══════════════════════════════════════════════════════════
+function initControls(){
+  // Populate example select
+  const sel=document.getElementById('exampleSelect');
+  EXAMPLES.forEach(ex=>{
+    const opt=document.createElement('option');
+    opt.value=ex;opt.textContent=ex;
+    sel.appendChild(opt);
+  });
+  sel.value=state.example;
+  sel.onchange=()=>{
+    state.example=sel.value;
+    state.activeHead=0;
+    state.attnView='matrix';
+    state.mlpPhase=0;
+    updatePredictedBadge();
+    renderCanvas();
+    animateBlockEntry();
+  };
+
+  updatePredictedBadge();
+
+  // Temperature
+  const tempSlider=document.getElementById('tempSlider');
+  const tempVal=document.getElementById('tempVal');
+  tempSlider.value=state.temperature;
+  tempSlider.oninput=()=>{
+    state.temperature=parseFloat(tempSlider.value);
+    tempVal.textContent=state.temperature.toFixed(1);
+    // re-render output panel only
+    renderCanvas();
+  };
+
+  // Sampling
+  document.querySelectorAll('input[name=sampling]').forEach(r=>{
+    r.onchange=()=>{
+      state.sampling=r.value;
+      const ctrl=document.getElementById('samplingControl');
+      ctrl.innerHTML=state.sampling==='topk'
+        ?`k=<input class="num-in" id="topKIn" type="number" min="1" max="50" value="${state.topK}">`
+        :`p=<input class="num-in" id="topPIn" type="number" min="0.1" max="1" step="0.05" value="${state.topP}">`;
+      attachNumInputs();
+    };
+  });
+  attachNumInputs();
+
+  // About
+  document.getElementById('aboutBtn').onclick=()=>showInfo('about');
+  document.getElementById('drawerClose').onclick=hideInfo;
+  document.getElementById('overlay').onclick=(e)=>{if(e.target===e.currentTarget)hideInfo();};
+}
+
+function attachNumInputs(){
+  const ki=document.getElementById('topKIn');
+  if(ki)ki.oninput=()=>{state.topK=parseInt(ki.value)||5;};
+  const pi=document.getElementById('topPIn');
+  if(pi)pi.oninput=()=>{state.topP=parseFloat(pi.value)||0.9;};
+}
+
+function updatePredictedBadge(){
+  const top=OUTPUT_PROBS[state.example]?.[0];
+  document.getElementById('predictedBadge').textContent=top?`→ "${top.t}"`:'→ …';
+}
+
+// ══════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded',()=>{
+  initControls();
+  renderCanvas();
+  animateBlockEntry();
+});
+</script>
+</body>
+</html>
